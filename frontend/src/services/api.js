@@ -1,8 +1,11 @@
 import axios from 'axios';
 
-// Create Axios client pointing to proxied API endpoint
+// Use Vite's development proxy locally and the deployed API URL in production.
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+
+// Create Axios client pointing to the configured API endpoint
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -68,7 +71,7 @@ api.interceptors.response.use(
 
         try {
           // Attempt token refresh from public auth endpoint
-          const response = await axios.post('/api/auth/refresh', { refreshToken });
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
           const { accessToken } = response.data;
           
           localStorage.setItem('accessToken', accessToken);
