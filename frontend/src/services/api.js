@@ -2,11 +2,14 @@ import axios from 'axios';
 
 // Use Vite's development proxy locally. VITE_API_BASE_URL can override the
 // production fallback for previews or a future backend deployment.
-const configuredApiUrl = import.meta.env.VITE_API_BASE_URL || (
+const environmentApiUrl = import.meta.env.VITE_API_BASE_URL;
+const configuredApiUrl = environmentApiUrl && !environmentApiUrl.includes('your-render-service')
+  ? environmentApiUrl
+  : (
   import.meta.env.PROD
     ? 'https://smart-parking-slot-reservation-system.onrender.com/api'
     : '/api'
-);
+  );
 const API_BASE_URL = configuredApiUrl.endsWith('/')
   ? configuredApiUrl.slice(0, -1)
   : configuredApiUrl;
