@@ -1,7 +1,15 @@
 import axios from 'axios';
 
-// Use Vite's development proxy locally and the deployed API URL in production.
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+// Use Vite's development proxy locally. VITE_API_BASE_URL can override the
+// production fallback for previews or a future backend deployment.
+const configuredApiUrl = import.meta.env.VITE_API_BASE_URL || (
+  import.meta.env.PROD
+    ? 'https://smart-parking-slot-reservation-system.onrender.com/api'
+    : '/api'
+);
+const API_BASE_URL = configuredApiUrl.endsWith('/')
+  ? configuredApiUrl.slice(0, -1)
+  : configuredApiUrl;
 
 // Create Axios client pointing to the configured API endpoint
 const api = axios.create({
