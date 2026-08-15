@@ -1,11 +1,25 @@
 import axios from 'axios';
 
-// Production:  set VITE_API_URL=https://your-render-app.onrender.com/api in Vercel env vars.
-// Development: Vite dev-server proxy rewrites /api → http://localhost:5000, so '/api' works.
-const API_BASE_URL =
+// ---------------------------------------------------------------------------
+// API Base URL resolution (priority order):
+//   1. VITE_API_URL env var        (set this in Vercel: Settings → Environment Variables)
+//   2. VITE_API_BASE_URL env var   (alias, also accepted)
+//   3. Production fallback          → Render backend URL (embedded at build time)
+//   4. Development fallback         → '/api'  (proxied by Vite dev server to localhost:5000)
+// ---------------------------------------------------------------------------
+const _envUrl =
   import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  '/api';
+  import.meta.env.VITE_API_BASE_URL;
+
+const _resolvedUrl = _envUrl && !_envUrl.includes('your-render-service')
+  ? _envUrl
+  : (
+      import.meta.env.PROD
+        ? 'https://smart-parking-slot-reservation-system.onrender.com/api'
+        : '/api'
+    );
+
+const API_BASE_URL = _resolvedUrl.replace(/\/$/, ''); // strip trailing slash
 
 // Create Axios client pointing to the configured API endpoint
 const api = axios.create({
