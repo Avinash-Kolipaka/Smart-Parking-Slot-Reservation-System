@@ -31,7 +31,7 @@ const UserSchema = new mongoose.Schema(
       required: [true, 'Please add an email'],
       unique: true,
       match: [
-        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,})+$/,
         'Please add a valid email'
       ],
       lowercase: true,
@@ -49,8 +49,17 @@ const UserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['customer', 'admin'],
-      default: 'customer'
+      enum: ['USER', 'ADMIN', 'PARKING_MANAGER', 'SUPER_ADMIN'],
+      default: 'USER'
+    },
+    isBanned: {
+      type: Boolean,
+      default: false
+    },
+    accountStatus: {
+      type: String,
+      enum: ['active', 'banned'],
+      default: 'active'
     },
     profileImage: {
       type: String,

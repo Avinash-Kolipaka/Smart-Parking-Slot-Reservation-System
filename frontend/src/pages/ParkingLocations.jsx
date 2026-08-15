@@ -29,7 +29,7 @@ const ParkingLocations = () => {
       if (priceMax) params.maxPrice = priceMax;
 
       const response = await api.get('/parking', { params });
-      setLocations(response.data.data);
+      setLocations(response.data.data.locations);
     } catch (err) {
       console.error('Failed to retrieve locations:', err.message);
     } finally {
@@ -63,15 +63,15 @@ const ParkingLocations = () => {
     });
   };
 
-  const getVehicleBadge = (type) => {
+  const getVehicleBadge = (type, key) => {
     switch (type) {
       case 'Bike':
-        return <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded"><Bike size={12} /> Bike</span>;
+        return <span key={key} className="flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded"><Bike size={12} /> Bike</span>;
       case 'EV':
-        return <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-yellow-400 bg-yellow-950/20 border border-yellow-900/30 px-2 py-0.5 rounded animate-pulse-slow"><Zap size={12} /> EV</span>;
+        return <span key={key} className="flex items-center gap-1 text-[10px] uppercase font-bold text-yellow-400 bg-yellow-950/20 border border-yellow-900/30 px-2 py-0.5 rounded animate-pulse-slow"><Zap size={12} /> EV</span>;
       case 'Car':
       default:
-        return <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-blue-400 bg-blue-950/20 border border-blue-900/30 px-2 py-0.5 rounded"><Car size={12} /> Car</span>;
+        return <span key={key} className="flex items-center gap-1 text-[10px] uppercase font-bold text-blue-400 bg-blue-950/20 border border-blue-900/30 px-2 py-0.5 rounded"><Car size={12} /> Car</span>;
     }
   };
 
@@ -226,7 +226,7 @@ const ParkingLocations = () => {
                     </div>
 
                     <div className="flex gap-2">
-                      {loc.vehicleTypes.map(vt => getVehicleBadge(vt))}
+                      {loc.vehicleTypes.map(vt => getVehicleBadge(vt, vt))}
                     </div>
 
                     {/* Operational hours and counts */}

@@ -1,0 +1,37 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy to ECS Staging API
+        run: |
+          aws ecs update-service --cluster parkops-staging-cluster --service parkops-api-service --force-new-deployment
+      
+      - name: Deploy to ECS Staging Worker
+        run: |
+          aws ecs update-service --cluster parkops-staging-cluster --service parkops-worker-service --force-new-deployment
+
+      - name: Wait for API health
+        run: |
+          aws ecs wait services-stable --cluster parkops-staging-cluster --services parkops-api-service
+
+      - name: Wait for Worker health
+        run: |
+          aws ecs wait services-stable --cluster parkops-staging-cluster --services parkops-worker-service

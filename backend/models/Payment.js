@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const PaymentSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: true
+    },
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
@@ -35,5 +40,7 @@ const PaymentSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+PaymentSchema.index({ tenantId: 1, status: 1 });
 
 module.exports = mongoose.model('Payment', PaymentSchema);

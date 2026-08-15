@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const BookingSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: true
+    },
     bookingId: {
       type: String,
       unique: true,
@@ -81,5 +86,14 @@ const BookingSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+// Index for fast user booking lookups and status filtering
+BookingSchema.index({ userId: 1, bookingStatus: 1 });
+// Index for tenant-scoped queries
+BookingSchema.index({ tenantId: 1, bookingStatus: 1 });
+// Critical compound index for double-booking overlap check
+BookingSchema.index({ slotId: 1, bookingStatus: 1, startTime: 1, endTime: 1 });
+// Index for booking expiration job
+BookingSchema.index({ bookingStatus: 1, endTime: 1 });
 
 module.exports = mongoose.model('Booking', BookingSchema);

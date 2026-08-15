@@ -5,7 +5,7 @@ const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
 
 router.use(protect);
-router.use(authorize('admin')); // Restrict all dashboard endpoints to Admin
+router.use(authorize('ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER', 'admin'));
 
 router.get('/stats', getStats);
 router.get('/analytics', getAnalytics);

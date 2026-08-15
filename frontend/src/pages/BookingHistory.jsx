@@ -141,7 +141,7 @@ const BookingHistory = () => {
     setLoading(true);
     try {
       const res = await api.get('/bookings');
-      setBookings(res.data.data);
+      setBookings(res.data.data.bookings);
     } catch (err) {
       console.error('Failed to fetch bookings:', err.message);
     } finally {

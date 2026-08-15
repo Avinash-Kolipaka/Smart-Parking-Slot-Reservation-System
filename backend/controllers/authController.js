@@ -24,7 +24,7 @@ const generateRefreshToken = (user) => {
 // @access  Public
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, role } = req.body;
+    const { name, email, password, phone } = req.body;
 
     // Check if user already exists
     const userExists = await User.findOne({ email });
@@ -38,7 +38,7 @@ const register = async (req, res, next) => {
       email,
       password,
       phone,
-      role: role || 'customer'
+      role: 'USER'
     });
 
     const accessToken = generateAccessToken(user);
@@ -263,6 +263,36 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+// @desc    Change password
+// @route   POST /api/auth/change-password
+// @access  Private
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    user.refreshTokens = []; // Clear active sessions on password change
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully. Please log in again.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -270,5 +300,6 @@ module.exports = {
   logout,
   getMe,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  changePassword
 };

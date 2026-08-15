@@ -50,10 +50,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Registration handler
-  const register = async (name, email, password, phone, role) => {
+  const register = async (name, email, password, phone) => {
     setLoading(true);
     try {
-      const response = await api.post('/auth/register', { name, email, password, phone, role });
+      const response = await api.post('/auth/register', { name, email, password, phone });
       const { accessToken, refreshToken, user: registeredUser } = response.data;
 
       localStorage.setItem('accessToken', accessToken);

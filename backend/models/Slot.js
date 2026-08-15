@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const SlotSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: true
+    },
     parkingLocationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ParkingLocation',
@@ -53,6 +58,7 @@ const SlotSchema = new mongoose.Schema(
 );
 
 // Compound index to guarantee uniqueness of slot number per parking location
-SlotSchema.index({ parkingLocationId: 1, slotNumber: 1 }, { unique: true });
+SlotSchema.index({ tenantId: 1, parkingLocationId: 1, status: 1 });
+SlotSchema.index({ parkingLocationId: 1, floor: 1, slotNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model('Slot', SlotSchema);

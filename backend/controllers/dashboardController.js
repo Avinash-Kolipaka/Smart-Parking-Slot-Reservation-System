@@ -3,18 +3,24 @@ const ParkingLocation = require('../models/ParkingLocation');
 const Slot = require('../models/Slot');
 const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
+const { getAsync, setExAsync } = require('../config/redisClient');
 
 // @desc    Get dashboard counts & basic summaries
 // @route   GET /api/dashboard/stats
 // @access  Private/Admin
 const getStats = async (req, res, next) => {
   try {
+    const cacheKey = 'dashboard:stats';
+    const cached = await getAsync(cacheKey);
+    if (cached) {
+      return res.status(200).json(JSON.parse(cached));
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    // Run parallel counts to speed up API response
     const [
       totalUsers,
       totalLocations,
@@ -25,8 +31,8 @@ const getStats = async (req, res, next) => {
       pendingBookings,
       cancelledBookings
     ] = await Promise.all([
-      User.countDocuments({ role: 'customer' }),
-      ParkingLocation.countDocuments({}),
+      User.countDocuments({ role: { $in: ['customer', 'USER'] } }),
+      ParkingLocation.countDocuments({ isActive: { $ne: false } }),
       Slot.countDocuments({}),
       Slot.countDocuments({ status: 'Available' }),
       Slot.countDocuments({ status: 'Occupied' }),
@@ -35,7 +41,6 @@ const getStats = async (req, res, next) => {
       Booking.countDocuments({ bookingStatus: 'Cancelled' })
     ]);
 
-    // Aggregate revenues
     const todayPayments = await Payment.aggregate([
       {
         $match: {
@@ -69,8 +74,9 @@ const getStats = async (req, res, next) => {
     const revenueToday = todayPayments[0]?.total || 0;
     const revenueThisMonth = monthPayments[0]?.total || 0;
 
-    res.status(200).json({
+    const responsePayload = {
       success: true,
+      message: 'Dashboard statistics fetched successfully',
       data: {
         totalUsers,
         totalParkingAreas: totalLocations,
@@ -83,7 +89,11 @@ const getStats = async (req, res, next) => {
         revenueToday,
         revenueThisMonth
       }
-    });
+    };
+
+    await setExAsync(cacheKey, 30, JSON.stringify(responsePayload));
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     next(error);
   }
@@ -94,7 +104,12 @@ const getStats = async (req, res, next) => {
 // @access  Private/Admin
 const getAnalytics = async (req, res, next) => {
   try {
-    // 1. Vehicle Type Distribution
+    const cacheKey = 'dashboard:analytics';
+    const cached = await getAsync(cacheKey);
+    if (cached) {
+      return res.status(200).json(JSON.parse(cached));
+    }
+
     const vehicleDistribution = await Booking.aggregate([
       { $match: { bookingStatus: { $in: ['Confirmed', 'Active', 'Completed'] } } },
       {
@@ -105,7 +120,6 @@ const getAnalytics = async (req, res, next) => {
       }
     ]);
 
-    // 2. Daily revenue in the last 7 days
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     sevenDaysAgo.setHours(0, 0, 0, 0);
@@ -126,7 +140,6 @@ const getAnalytics = async (req, res, next) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // 3. Peak hours of check-ins
     const peakHours = await Booking.aggregate([
       { $match: { bookingStatus: { $in: ['Confirmed', 'Active', 'Completed'] } } },
       {
@@ -138,7 +151,6 @@ const getAnalytics = async (req, res, next) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // 4. Top Locations by Revenue
     const topLocations = await Booking.aggregate([
       { $match: { paymentStatus: 'Paid', bookingStatus: { $ne: 'Cancelled' } } },
       {
@@ -168,8 +180,9 @@ const getAnalytics = async (req, res, next) => {
       }
     ]);
 
-    res.status(200).json({
+    const responsePayload = {
       success: true,
+      message: 'Dashboard analytics fetched successfully',
       data: {
         vehicleDistribution: vehicleDistribution.map(item => ({
           type: item._id,
@@ -185,7 +198,11 @@ const getAnalytics = async (req, res, next) => {
         })),
         topLocations
       }
-    });
+    };
+
+    await setExAsync(cacheKey, 30, JSON.stringify(responsePayload));
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     next(error);
   }

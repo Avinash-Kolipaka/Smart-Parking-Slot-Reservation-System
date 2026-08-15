@@ -1,16 +1,29 @@
 const User = require('../models/User');
 const AdminLog = require('../models/AdminLog');
 
-// @desc    Get all users
+// @desc    Get all users (paginated)
 // @route   GET /api/users
 // @access  Private/Admin
 const getUsers = async (req, res, next) => {
   try {
-    const users = await User.find({}).sort({ createdAt: -1 });
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await User.countDocuments();
+    const users = await User.find({}).select('-refreshTokens -resetPasswordToken -resetPasswordExpire').sort({ createdAt: -1 }).skip(skip).limit(limit);
+
     res.status(200).json({
       success: true,
-      count: users.length,
-      data: users
+      data: {
+        users,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      }
     });
   } catch (error) {
     next(error);
@@ -125,9 +138,55 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
+// @desc    Ban or Unban User
+// @route   PUT /api/users/:id/ban
+// @access  Private/Admin
+const toggleBanUser = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({ success: false, message: 'Cannot ban your own admin account' });
+    }
+
+    const previousStatus = user.accountStatus || 'active';
+    user.isBanned = !user.isBanned;
+    user.accountStatus = user.isBanned ? 'banned' : 'active';
+    
+    // Clear active sessions if banned
+    if (user.isBanned) {
+      user.refreshTokens = [];
+    }
+
+    await user.save();
+
+    await AdminLog.create({
+      adminId: req.user.id,
+      action: user.isBanned ? 'BAN_USER' : 'UNBAN_USER',
+      resource: 'User',
+      resourceId: user._id.toString(),
+      details: `${user.isBanned ? 'Banned' : 'Unbanned'} user ${user.email}`,
+      oldValue: previousStatus,
+      newValue: user.accountStatus
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `User '${user.name}' has been ${user.isBanned ? 'banned' : 'unbanned'} successfully`,
+      data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getUsers,
   updateProfile,
   updateUser,
-  deleteUser
+  deleteUser,
+  toggleBanUser
 };

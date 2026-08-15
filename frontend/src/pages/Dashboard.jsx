@@ -18,7 +18,7 @@ const Dashboard = () => {
     setLoading(true);
     try {
       const bookingsRes = await api.get('/bookings');
-      setBookings(bookingsRes.data.data);
+      setBookings(bookingsRes.data.data.bookings);
       
       // Seed notifications list
       setNotifications([

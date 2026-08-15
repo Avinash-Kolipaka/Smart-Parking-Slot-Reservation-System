@@ -102,15 +102,21 @@ const processPayment = async (req, res, next) => {
 // @access  Private
 const getPaymentHistory = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
+    const userRole = (req.user.role || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER'].includes(userRole);
+
     let query = {};
-    
-    if (req.user.role !== 'admin') {
-      // Find bookings of this user
+    if (!isAdmin) {
       const userBookings = await Booking.find({ userId: req.user.id }).select('_id');
       const bookingIds = userBookings.map(b => b._id);
       query.bookingId = { $in: bookingIds };
     }
 
+    const total = await Payment.countDocuments(query);
     const payments = await Payment.find(query)
       .populate({
         path: 'bookingId',
@@ -120,12 +126,16 @@ const getPaymentHistory = async (req, res, next) => {
           { path: 'slotId', select: 'slotNumber floor' }
         ]
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     res.status(200).json({
       success: true,
-      count: payments.length,
-      data: payments
+      data: {
+        payments,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+      }
     });
   } catch (error) {
     next(error);

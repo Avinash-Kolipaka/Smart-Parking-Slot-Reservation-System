@@ -1,0 +1,76 @@
+openapi: 3.0.0
+info:
+  title: ParkOps API
+  description: Multi-Tenant SaaS Smart Parking Reservation & Operations API
+  version: 1.0.0
+servers:
+  - url: https://api.parkops.com/v1
+    description: Production API
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "Not authorized"
+paths:
+  /api/parking:
+    get:
+      summary: Get Parking Locations
+      description: Returns a list of active parking locations for the tenant.
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of parking locations
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/bookings:
+    post:
+      summary: Create Booking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                parkingLocationId:
+                  type: string
+                slotId:
+                  type: string
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Booking created

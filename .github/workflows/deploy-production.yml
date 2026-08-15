@@ -1,0 +1,41 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.parkops.com
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy to ECS Production API
+        run: |
+          aws ecs update-service --cluster parkops-production-cluster --service parkops-api-service --force-new-deployment
+      
+      - name: Deploy to ECS Production Worker
+        run: |
+          aws ecs update-service --cluster parkops-production-cluster --service parkops-worker-service --force-new-deployment
+
+      - name: Wait for API health
+        run: |
+          aws ecs wait services-stable --cluster parkops-production-cluster --services parkops-api-service
+
+      - name: Wait for Worker health
+        run: |
+          aws ecs wait services-stable --cluster parkops-production-cluster --services parkops-worker-service

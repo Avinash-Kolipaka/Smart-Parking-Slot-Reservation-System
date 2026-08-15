@@ -1,12 +1,19 @@
 const mongoose = require('mongoose');
+const logger = require('../utils/logger');
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smart-parking');
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    if (!process.env.MONGO_URI) {
+      throw new Error('MONGO_URI is not configured');
+    }
+
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 10000
+    });
+    logger.info(`MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`MongoDB Connection Error: ${error.message}`);
-    process.exit(1);
+    logger.error(`MongoDB connection error: ${error.message}`);
+    throw error;
   }
 };
 

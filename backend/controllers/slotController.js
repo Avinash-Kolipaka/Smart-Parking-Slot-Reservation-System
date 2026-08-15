@@ -1,6 +1,8 @@
 const Slot = require('../models/Slot');
 const ParkingLocation = require('../models/ParkingLocation');
 const AdminLog = require('../models/AdminLog');
+const { notifySlotUpdate } = require('../config/socket');
+const { delAsync } = require('../config/redisClient');
 
 // @desc    Get slots (with filters)
 // @route   GET /api/slots
@@ -41,12 +43,15 @@ const createSlot = async (req, res, next) => {
 
     const slot = await Slot.create(req.body);
 
-    // Update location counts
     location.totalSlots = await Slot.countDocuments({ parkingLocationId });
     await location.save();
 
+    await delAsync(`parking:${parkingLocationId}`);
+    notifySlotUpdate(parkingLocationId, { slotId: slot._id, status: slot.status, action: 'created' });
+
     res.status(201).json({
       success: true,
+      message: 'Slot created successfully',
       data: slot
     });
   } catch (error) {
@@ -86,21 +91,22 @@ const generateBatchSlots = async (req, res, next) => {
         });
         createdSlots.push(slot);
       } catch (err) {
-        // Skip duplicate errors in batch creation
         if (err.code !== 11000) {
           throw err;
         }
       }
     }
 
-    // Refresh count in location
     location.totalSlots = await Slot.countDocuments({ parkingLocationId });
     await location.save();
 
-    // Log admin action
+    await delAsync(`parking:${parkingLocationId}`);
+    notifySlotUpdate(parkingLocationId, { count: createdSlots.length, action: 'batch_created' });
+
     await AdminLog.create({
       adminId: req.user.id,
       action: 'BATCH_GENERATE_SLOTS',
+      resource: 'Slot',
       details: `Generated batch of ${createdSlots.length} slots for location ID ${parkingLocationId} on Floor ${floor}`
     });
 
@@ -125,20 +131,28 @@ const updateSlot = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Slot not found' });
     }
 
+    const oldStatus = slot.status;
     slot = await Slot.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
     });
 
-    // Sync total slots count if deleted or added, but since this is PUT, we just ensure location matches
-    const location = await ParkingLocation.findById(slot.parkingLocationId);
-    if (location) {
-      location.totalSlots = await Slot.countDocuments({ parkingLocationId: slot.parkingLocationId });
-      await location.save();
+    await delAsync(`parking:${slot.parkingLocationId}`);
+    notifySlotUpdate(slot.parkingLocationId, { slotId: slot._id, status: slot.status, action: 'updated' });
+
+    if (oldStatus !== slot.status) {
+      await AdminLog.create({
+        adminId: req.user.id,
+        action: 'UPDATE_SLOT_STATUS',
+        resource: 'Slot',
+        resourceId: slot._id.toString(),
+        details: `Updated slot ${slot.slotNumber} status from ${oldStatus} to ${slot.status}`
+      });
     }
 
     res.status(200).json({
       success: true,
+      message: 'Slot updated successfully',
       data: slot
     });
   } catch (error) {
@@ -159,12 +173,14 @@ const deleteSlot = async (req, res, next) => {
     const locationId = slot.parkingLocationId;
     await slot.deleteOne();
 
-    // Update parent location totals
     const location = await ParkingLocation.findById(locationId);
     if (location) {
       location.totalSlots = await Slot.countDocuments({ parkingLocationId: locationId });
       await location.save();
     }
+
+    await delAsync(`parking:${locationId}`);
+    notifySlotUpdate(locationId, { slotId: req.params.id, action: 'deleted' });
 
     res.status(200).json({
       success: true,

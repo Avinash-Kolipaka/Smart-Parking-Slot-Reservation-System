@@ -13,10 +13,10 @@ const { validateBody, slotSchema } = require('../utils/validation');
 
 router.get('/', getSlots);
 
-// Admin-only slot management routes
-router.post('/', protect, authorize('admin'), validateBody(slotSchema), createSlot);
-router.post('/generate-batch', protect, authorize('admin'), generateBatchSlots);
-router.put('/:id', protect, authorize('admin'), validateBody(slotSchema.partial()), updateSlot);
-router.delete('/:id', protect, authorize('admin'), deleteSlot);
+// Admin & Manager slot management routes
+router.post('/', protect, authorize('ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER', 'admin'), validateBody(slotSchema), createSlot);
+router.post('/generate-batch', protect, authorize('ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER', 'admin'), generateBatchSlots);
+router.put('/:id', protect, authorize('ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER', 'admin'), validateBody(slotSchema.partial()), updateSlot);
+router.delete('/:id', protect, authorize('ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER', 'admin'), deleteSlot);
 
 module.exports = router;

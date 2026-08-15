@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { 
   LayoutDashboard, Users, MapPin, Grid, ScanLine, FileBarChart2, 
-  ArrowLeft, LogOut, ShieldAlert 
+  ArrowLeft, LogOut, ShieldAlert, BrainCircuit, Sparkles 
 } from 'lucide-react';
 
 const AdminLayout = () => {
@@ -25,7 +25,9 @@ const AdminLayout = () => {
     { name: 'Manage Locations', path: '/admin/locations', icon: MapPin },
     { name: 'Manage Slots', path: '/admin/slots', icon: Grid },
     { name: 'Manage Users', path: '/admin/users', icon: Users },
-    { name: 'System Reports', path: '/admin/reports', icon: FileBarChart2 }
+    { name: 'System Reports', path: '/admin/reports', icon: FileBarChart2 },
+    { name: 'AI Intelligence', path: '/admin/ai-insights', icon: BrainCircuit },
+    { name: 'AI Assistant', path: '/admin/ai-assistant', icon: Sparkles }
   ];
 
   return (

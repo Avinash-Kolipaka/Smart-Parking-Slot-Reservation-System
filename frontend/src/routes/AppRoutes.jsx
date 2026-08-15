@@ -30,6 +30,8 @@ import ManageUsers from '../pages/ManageUsers';
 import ManageParking from '../pages/ManageParking';
 import ManageSlots from '../pages/ManageSlots';
 import Reports from '../pages/Reports';
+import AiInsights from '../pages/AiInsights';
+import AiAssistant from '../pages/AiAssistant';
 import QRScanner from '../components/QRScanner'; // Render QR scanner component directly on a page
 
 // Route Guard: Requires login
@@ -134,6 +136,8 @@ const AppRoutes = () => {
         <Route path="slots" element={<ManageSlots />} />
         <Route path="users" element={<ManageUsers />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="ai-insights" element={<AiInsights />} />
+        <Route path="ai-assistant" element={<AiAssistant />} />
       </Route>
 
       {/* 404 Route */}

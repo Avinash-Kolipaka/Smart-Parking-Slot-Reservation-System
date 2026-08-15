@@ -3,10 +3,19 @@ const Booking = require('../models/Booking');
 const Slot = require('../models/Slot');
 const ParkingLocation = require('../models/ParkingLocation');
 const Notification = require('../models/Notification');
-const { generateBookingQR } = require('../services/qrService');
-const { sendBookingConfirmation } = require('../services/emailService');
+const User = require('../models/User');
+const { generateBookingQR, verifyQRPayload } = require('../services/qrService');
+const { calculatePricing } = require('../services/pricingService');
+const { lockSlotForBooking, releaseSlotLock } = require('../services/slotLockService');
+const { notifySlotUpdate, notifyBookingEvent } = require('../config/socket');
+const {
+  sendBookingConfirmation,
+  sendBookingCancellation,
+  sendCheckInNotification,
+  sendCheckOutNotification
+} = require('../services/emailService');
+const logger = require('../utils/logger');
 
-// Helper to generate human readable booking ID
 const generateReadableId = () => {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const randomStr = crypto.randomBytes(3).toString('hex').toUpperCase();
@@ -17,15 +26,25 @@ const generateReadableId = () => {
 // @route   POST /api/bookings/book
 // @access  Private
 const createBooking = async (req, res, next) => {
+  let lockKey = null;
   try {
-    const { locationId, slotId, vehicleNumber, vehicleType, bookingDate, startTime, endTime } = req.body;
-    const userId = req.user.id;
+    const {
+      locationId,
+      slotId,
+      vehicleNumber,
+      vehicleType,
+      bookingDate,
+      startTime,
+      endTime,
+      isEVChargingRequested,
+      discountCode
+    } = req.body;
 
+    const userId = req.user.id;
     const start = new Date(startTime);
     const end = new Date(endTime);
     const now = new Date();
 
-    // Rule: Booking must be in the future
     if (start <= now) {
       return res.status(400).json({ success: false, message: 'Reservation must start in the future' });
     }
@@ -34,8 +53,7 @@ const createBooking = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'End time must be after start time' });
     }
 
-    // Rule: One user cannot hold multiple active bookings at the same time
-    // Active statuses: Pending, Confirmed, Active
+    // Check user's active bookings
     const existingActiveBooking = await Booking.findOne({
       userId,
       bookingStatus: { $in: ['Pending', 'Confirmed', 'Active'] }
@@ -45,17 +63,22 @@ const createBooking = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'You already have an active booking reservation. Please complete or cancel it first.',
-        booking: existingActiveBooking
+        data: existingActiveBooking
       });
     }
 
-    // Verify slot exists and is available
+    // Verify slot
     const slot = await Slot.findById(slotId);
     if (!slot) {
       return res.status(404).json({ success: false, message: 'Parking slot not found' });
     }
-    if (slot.status === 'Disabled') {
-      return res.status(400).json({ success: false, message: 'This slot is currently disabled' });
+    if (['Disabled', 'Maintenance'].includes(slot.status)) {
+      return res.status(400).json({ success: false, message: `This slot is currently ${slot.status.toLowerCase()}` });
+    }
+
+    // Check vehicle type compatibility
+    if (slot.vehicleType === 'EV' && vehicleType !== 'EV') {
+      return res.status(400).json({ success: false, message: 'This slot is reserved strictly for Electric Vehicles (EV).' });
     }
 
     // Verify location
@@ -64,11 +87,20 @@ const createBooking = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Parking location not found' });
     }
     if (location.status === 'Disabled') {
-      return res.status(400).json({ success: false, message: 'This parking location is closed' });
+      return res.status(400).json({ success: false, message: 'This parking location is currently closed' });
     }
 
-    // Rule: Prevent overlapping bookings for the same slot
-    // Check if slot has overlapping active bookings
+    // Acquire atomic Redis slot lock for double-booking prevention
+    lockKey = await lockSlotForBooking(slotId, startTime, endTime, 30);
+    if (!lockKey) {
+      return res.status(409).json({
+        success: false,
+        message: 'This slot is currently being locked by another transaction. Please try again.',
+        errorCode: 'SLOT_LOCKED'
+      });
+    }
+
+    // Check database overlap
     const overlappingBooking = await Booking.findOne({
       slotId,
       bookingStatus: { $in: ['Pending', 'Confirmed', 'Active'] },
@@ -77,25 +109,28 @@ const createBooking = async (req, res, next) => {
     });
 
     if (overlappingBooking) {
+      await releaseSlotLock(lockKey);
       return res.status(400).json({
         success: false,
-        message: 'This slot is already reserved for the selected timing window'
+        message: 'This slot is already reserved for the selected timing window',
+        errorCode: 'SLOT_OVERLAP'
       });
     }
 
-    // Calculate details
-    const durationMs = end - start;
-    const durationHours = parseFloat((durationMs / (1000 * 60 * 60)).toFixed(2));
-    
-    // Calculate price (use slot price if set, otherwise location price per hour)
-    const rate = slot.price !== undefined ? slot.price : location.pricePerHour;
-    const amount = parseFloat((durationHours * rate).toFixed(2));
+    // Calculate pricing on backend
+    const basePrice = slot.price !== undefined && slot.price > 0 ? slot.price : location.pricePerHour;
+    const pricing = calculatePricing({
+      basePricePerHour: basePrice,
+      startTime: start,
+      endTime: end,
+      vehicleType,
+      isEVChargingRequested,
+      discountCode
+    });
 
-    // Generate validation parameters
     const verificationToken = crypto.randomBytes(16).toString('hex');
     const bookingId = generateReadableId();
 
-    // Create the booking object
     const booking = new Booking({
       bookingId,
       userId,
@@ -103,17 +138,16 @@ const createBooking = async (req, res, next) => {
       slotId,
       vehicleNumber,
       vehicleType,
-      bookingDate: new Date(bookingDate),
+      bookingDate: new Date(bookingDate || start),
       startTime: start,
       endTime: end,
-      duration: durationHours,
-      amount,
+      duration: pricing.durationHours,
+      amount: pricing.finalAmount,
       verificationToken,
-      bookingStatus: 'Pending', // Pending payment
+      bookingStatus: 'Pending',
       paymentStatus: 'Pending'
     });
 
-    // Generate QR code data URL
     const qrUrl = await generateBookingQR({
       bookingId,
       userId,
@@ -124,45 +158,74 @@ const createBooking = async (req, res, next) => {
 
     await booking.save();
 
-    // Update slot status to Reserved
     slot.status = 'Reserved';
     await slot.save();
 
-    // Send customer alert notification
+    // Release temporary Redis lock after DB persist
+    await releaseSlotLock(lockKey);
+
+    // Socket.io event & Notification
+    notifySlotUpdate(locationId, { slotId: slot._id, status: 'Reserved' });
+    notifyBookingEvent('created', booking);
+
     await Notification.create({
       userId,
-      message: `Reservation ${bookingId} created. Please complete payment to confirm your spot.`,
-      type: 'General'
+      title: 'Reservation Created',
+      message: `Reservation ${bookingId} created. Complete payment to confirm your spot.`,
+      type: 'BOOKING_STARTING'
     });
 
     res.status(201).json({
       success: true,
+      message: 'Booking created successfully',
       data: booking
     });
   } catch (error) {
+    if (lockKey) await releaseSlotLock(lockKey);
     next(error);
   }
 };
 
-// @desc    Get bookings (Admin sees all, Customer sees their own)
+// @desc    Get bookings (Admin/Managers see all, Customer sees their own)
 // @route   GET /api/bookings
 // @access  Private
 const getBookings = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
     let query = {};
-    if (req.user.role !== 'admin') {
+    const userRole = (req.user.role || '').toUpperCase();
+    if (!['ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER'].includes(userRole)) {
       query.userId = req.user.id;
     }
 
+    if (req.query.status) {
+      query.bookingStatus = req.query.status;
+    }
+
+    const total = await Booking.countDocuments(query);
     const bookings = await Booking.find(query)
-      .populate('locationId', 'name address')
-      .populate('slotId', 'slotNumber floor parkingZone')
-      .sort({ createdAt: -1 });
+      .populate('locationId', 'name address city')
+      .populate('slotId', 'slotNumber floor parkingZone vehicleType')
+      .populate('userId', 'name email phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     res.status(200).json({
       success: true,
-      count: bookings.length,
-      data: bookings
+      message: 'Bookings fetched successfully',
+      data: {
+        bookings,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      }
     });
   } catch (error) {
     next(error);
@@ -176,15 +239,16 @@ const getBooking = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id)
       .populate('locationId', 'name address coordinates pricePerHour')
-      .populate('slotId', 'slotNumber floor parkingZone')
-      .populate('userId', 'name email');
+      .populate('slotId', 'slotNumber floor parkingZone vehicleType')
+      .populate('userId', 'name email phone');
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Enforce authorization
-    if (req.user.role !== 'admin' && booking.userId._id.toString() !== req.user.id) {
+    const userRole = (req.user.role || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER'].includes(userRole);
+    if (!isAdmin && booking.userId._id.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Not authorized to view this booking' });
     }
 
@@ -207,12 +271,12 @@ const cancelBooking = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Enforce authorization
-    if (req.user.role !== 'admin' && booking.userId.toString() !== req.user.id) {
+    const userRole = (req.user.role || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'PARKING_MANAGER'].includes(userRole);
+    if (!isAdmin && booking.userId.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Not authorized to cancel this booking' });
     }
 
-    // Ensure status is cancelable
     if (['Completed', 'Cancelled', 'Expired', 'Active'].includes(booking.bookingStatus)) {
       return res.status(400).json({
         success: false,
@@ -226,19 +290,26 @@ const cancelBooking = async (req, res, next) => {
     }
     await booking.save();
 
-    // Release the associated slot
     const slot = await Slot.findById(booking.slotId);
     if (slot && slot.status === 'Reserved') {
       slot.status = 'Available';
       await slot.save();
+      notifySlotUpdate(booking.locationId, { slotId: slot._id, status: 'Available' });
     }
 
-    // Notify customer
+    notifyBookingEvent('cancelled', booking);
+
     await Notification.create({
       userId: booking.userId,
+      title: 'Booking Cancelled',
       message: `Your booking reservation ${booking.bookingId} has been cancelled successfully.`,
-      type: 'BookingCancelled'
+      type: 'BOOKING_CANCELLED'
     });
+
+    const user = await User.findById(booking.userId);
+    if (user && user.email) {
+      sendBookingCancellation(user.email, user.name, booking.bookingId).catch(err => logger.error(`Email error: ${err.message}`));
+    }
 
     res.status(200).json({
       success: true,
@@ -250,14 +321,12 @@ const cancelBooking = async (req, res, next) => {
   }
 };
 
-// @desc    Verify QR code scan (Check-In or Check-Out)
-// @route   POST /api/bookings/verify-qr
+// @desc    Check-in user via QR scan or Booking ID
+// @route   POST /api/bookings/:id/check-in
 // @access  Private/Admin
-const verifyQR = async (req, res, next) => {
+const checkInBooking = async (req, res, next) => {
   try {
-    const { token, bookingId, slotId } = req.body;
-
-    const booking = await Booking.findOne({ bookingId })
+    const booking = await Booking.findById(req.params.id)
       .populate('userId', 'name email')
       .populate('locationId', 'name')
       .populate('slotId', 'slotNumber floor');
@@ -266,69 +335,160 @@ const verifyQR = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    if (booking.verificationToken !== token || booking.slotId._id.toString() !== slotId) {
-      return res.status(400).json({ success: false, message: 'Invalid ticket scan payload' });
+    if (booking.bookingStatus !== 'Confirmed') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot check in. Current booking status is '${booking.bookingStatus}' (Must be 'Confirmed')`
+      });
     }
 
-    const slot = await Slot.findById(slotId);
-    if (!slot) {
-      return res.status(404).json({ success: false, message: 'Associated slot not found' });
-    }
+    booking.bookingStatus = 'Active';
+    booking.checkInTime = new Date();
+    await booking.save();
 
-    // Handle check-in
-    if (booking.bookingStatus === 'Confirmed') {
-      // Check in
-      booking.bookingStatus = 'Active';
-      booking.checkInTime = new Date();
-      await booking.save();
-
+    const slot = await Slot.findById(booking.slotId._id);
+    if (slot) {
       slot.status = 'Occupied';
       await slot.save();
+      notifySlotUpdate(booking.locationId._id, { slotId: slot._id, status: 'Occupied' });
+    }
 
-      // Notify customer
-      await Notification.create({
-        userId: booking.userId._id,
-        message: `Welcome! Checked in successfully for booking ${booking.bookingId} at slot ${slot.slotNumber}.`,
-        type: 'General'
-      });
+    notifyBookingEvent('checked-in', booking);
 
-      return res.status(200).json({
-        success: true,
-        action: 'CHECK_IN',
-        message: `Successfully checked in user ${booking.userId.name} to slot ${slot.slotNumber} (Floor ${slot.floor})`,
-        data: booking
+    await Notification.create({
+      userId: booking.userId._id,
+      title: 'Check-In Confirmed',
+      message: `Checked in successfully for booking ${booking.bookingId} at slot ${slot ? slot.slotNumber : ''}.`,
+      type: 'CHECK_IN'
+    });
+
+    sendCheckInNotification(
+      booking.userId.email,
+      booking.userId.name,
+      booking.bookingId,
+      booking.checkInTime.toLocaleTimeString()
+    ).catch(err => logger.error(`Email error: ${err.message}`));
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully checked in user ${booking.userId.name}`,
+      data: booking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Check-out user and calculate actual billing
+// @route   POST /api/bookings/:id/check-out
+// @access  Private/Admin
+const checkOutBooking = async (req, res, next) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+      .populate('userId', 'name email')
+      .populate('locationId', 'name pricePerHour')
+      .populate('slotId', 'slotNumber floor');
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    if (booking.bookingStatus !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot check out. Current booking status is '${booking.bookingStatus}' (Must be 'Active')`
       });
     }
 
-    // Handle check-out
-    if (booking.bookingStatus === 'Active') {
-      // Check out
-      booking.bookingStatus = 'Completed';
-      booking.checkOutTime = new Date();
-      await booking.save();
+    const checkOutTime = new Date();
+    booking.checkOutTime = checkOutTime;
+    booking.bookingStatus = 'Completed';
 
+    // Calculate overstay surcharges if actual stay exceeded reserved end time by > 15 mins
+    const reservedEndTime = new Date(booking.endTime);
+    if (checkOutTime > reservedEndTime) {
+      const overstayMs = checkOutTime.getTime() - reservedEndTime.getTime();
+      const overstayHours = Math.ceil(overstayMs / (1000 * 60 * 60));
+      if (overstayHours > 0) {
+        const extraCharge = overstayHours * (booking.locationId.pricePerHour || 50);
+        booking.amount = Math.round((booking.amount + extraCharge) * 100) / 100;
+      }
+    }
+
+    await booking.save();
+
+    const slot = await Slot.findById(booking.slotId._id);
+    if (slot) {
       slot.status = 'Available';
       await slot.save();
-
-      // Notify customer
-      await Notification.create({
-        userId: booking.userId._id,
-        message: `Checked out successfully for booking ${booking.bookingId}. Thank you!`,
-        type: 'General'
-      });
-
-      return res.status(200).json({
-        success: true,
-        action: 'CHECK_OUT',
-        message: `Successfully checked out user ${booking.userId.name} from slot ${slot.slotNumber}. Slot is now vacant.`,
-        data: booking
-      });
+      notifySlotUpdate(booking.locationId._id, { slotId: slot._id, status: 'Available' });
     }
 
-    // Already checked out or canceled states
-    return res.status(400).json({
-      success: false,
-      message: `Invalid check operation. Ticket status is currently: '${booking.bookingStatus}'`
+    notifyBookingEvent('checked-out', booking);
+
+    await Notification.create({
+      userId: booking.userId._id,
+      title: 'Check-Out Completed',
+      message: `Checked out successfully for booking ${booking.bookingId}. Final Amount: ₹${booking.amount}`,
+      type: 'CHECK_OUT'
+    });
+
+    sendCheckOutNotification(
+      booking.userId.email,
+      booking.userId.name,
+      booking.bookingId,
+      checkOutTime.toLocaleTimeString(),
+      booking.amount
+    ).catch(err => logger.error(`Email error: ${err.message}`));
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully checked out user ${booking.userId.name}`,
+      data: booking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verify QR payload
+// @route   POST /api/bookings/verify-qr
+// @access  Private/Admin
+const verifyQR = async (req, res, next) => {
+  try {
+    const { token, bookingId, slotId, qrPayload } = req.body;
+
+    let targetBookingId = bookingId;
+    let targetSlotId = slotId;
+    let targetToken = token;
+
+    if (qrPayload) {
+      const verification = verifyQRPayload(qrPayload);
+      if (!verification.valid) {
+        return res.status(400).json({ success: false, message: verification.message });
+      }
+      targetBookingId = verification.payload.bookingId;
+      targetSlotId = verification.payload.slotId;
+      targetToken = verification.payload.token;
+    }
+
+    const booking = await Booking.findOne({ bookingId: targetBookingId })
+      .populate('userId', 'name email')
+      .populate('locationId', 'name')
+      .populate('slotId', 'slotNumber floor');
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    if (booking.verificationToken !== targetToken) {
+      return res.status(400).json({ success: false, message: 'Invalid QR verification token' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'QR Code verified successfully',
+      data: booking
     });
   } catch (error) {
     next(error);
@@ -340,5 +500,7 @@ module.exports = {
   getBookings,
   getBooking,
   cancelBooking,
+  checkInBooking,
+  checkOutBooking,
   verifyQR
 };

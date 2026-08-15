@@ -2,19 +2,26 @@ const cron = require('node-cron');
 const Booking = require('../models/Booking');
 const Slot = require('../models/Slot');
 const Notification = require('../models/Notification');
+const { notifySlotUpdate, notifyBookingEvent } = require('../config/socket');
+const logger = require('../utils/logger');
+const { startAnalyticsJob } = require('./analyticsJob');
+const { startForecastJob } = require('./forecastJob');
+const { startReportJob } = require('./reportJob');
 
 const initCronJobs = () => {
-  // Run every minute
-  cron.schedule('* * * * *', async () => {
-    console.log('Running background cron jobs: Checking for expired booking reservations...');
+  // Mount intelligence and background aggregation jobs
+  startAnalyticsJob();
+  startForecastJob();
+  startReportJob();
 
+  // Run every minute safely
+  cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
-      
-      // 1. Expire Confirmed Bookings (paid) if check-in is overdue by 15 minutes
       const gracePeriodMs = 15 * 60 * 1000;
       const overdueTime = new Date(now.getTime() - gracePeriodMs);
 
+      // 1. Expire Confirmed Bookings (paid) if check-in is overdue by 15 minutes
       const overdueConfirmedBookings = await Booking.find({
         bookingStatus: 'Confirmed',
         startTime: { $lt: overdueTime }
@@ -24,54 +31,55 @@ const initCronJobs = () => {
         booking.bookingStatus = 'Expired';
         await booking.save();
 
-        // Release the slot
         const slot = await Slot.findById(booking.slotId);
         if (slot && slot.status === 'Reserved') {
           slot.status = 'Available';
           await slot.save();
+          notifySlotUpdate(booking.locationId, { slotId: slot._id, status: 'Available' });
         }
 
-        // Notify user
+        notifyBookingEvent('expired', booking);
+
         await Notification.create({
           userId: booking.userId,
+          title: 'Booking Expired',
           message: `Your booking reservation ${booking.bookingId} has expired as you did not check in within the 15-minute grace period.`,
-          type: 'BookingExpired'
+          type: 'BOOKING_EXPIRED'
         });
 
-        console.log(`Booking ID ${booking.bookingId} expired (Check-in overdue)`);
+        logger.info(`Booking ID ${booking.bookingId} expired (Check-in overdue)`);
       }
 
-      // 2. Expire Pending Bookings (unpaid) 15 minutes after booking creation
-      const unpaidOverdueTime = new Date(now.getTime() - gracePeriodMs);
-      
+      // 2. Expire Pending Bookings (unpaid) 15 minutes after creation
       const overdueUnpaidBookings = await Booking.find({
         bookingStatus: 'Pending',
-        createdAt: { $lt: unpaidOverdueTime }
+        createdAt: { $lt: overdueTime }
       });
 
       for (const booking of overdueUnpaidBookings) {
         booking.bookingStatus = 'Expired';
         await booking.save();
 
-        // Release the slot
         const slot = await Slot.findById(booking.slotId);
         if (slot && slot.status === 'Reserved') {
           slot.status = 'Available';
           await slot.save();
+          notifySlotUpdate(booking.locationId, { slotId: slot._id, status: 'Available' });
         }
 
-        // Notify user
+        notifyBookingEvent('expired', booking);
+
         await Notification.create({
           userId: booking.userId,
-          message: `Your booking reservation ${booking.bookingId} has expired due to unpaid status.`,
-          type: 'BookingExpired'
+          title: 'Booking Expired',
+          message: `Your booking reservation ${booking.bookingId} has expired due to pending payment.`,
+          type: 'BOOKING_EXPIRED'
         });
 
-        console.log(`Booking ID ${booking.bookingId} expired (Payment overdue)`);
+        logger.info(`Booking ID ${booking.bookingId} expired (Payment overdue)`);
       }
-
     } catch (error) {
-      console.error('Error executing cron jobs:', error.message);
+      logger.error(`Error executing background cron jobs: ${error.message}`);
     }
   });
 };

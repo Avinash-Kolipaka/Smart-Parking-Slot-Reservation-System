@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const ReviewSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: true
+    },
     locationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ParkingLocation',

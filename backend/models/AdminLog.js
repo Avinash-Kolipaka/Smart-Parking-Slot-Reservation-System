@@ -12,7 +12,29 @@ const AdminLogSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    resource: {
+      type: String,
+      trim: true
+    },
+    resourceId: {
+      type: String,
+      trim: true
+    },
     details: {
+      type: String,
+      trim: true
+    },
+    oldValue: {
+      type: mongoose.Schema.Types.Mixed
+    },
+    newValue: {
+      type: mongoose.Schema.Types.Mixed
+    },
+    ipAddress: {
+      type: String,
+      trim: true
+    },
+    userAgent: {
       type: String,
       trim: true
     }

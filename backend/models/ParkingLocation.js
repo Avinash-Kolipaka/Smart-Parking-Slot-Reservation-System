@@ -1,7 +1,12 @@
 const mongoose = require('mongoose');
 
-const ParkingLocationSchema = new mongoose.Schema(
+const parkingLocationSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: true
+    },
     name: {
       type: String,
       required: [true, 'Please add a location name'],
@@ -85,6 +90,25 @@ const ParkingLocationSchema = new mongoose.Schema(
       buildingName: { type: String, trim: true },
       unitNumber: { type: String, trim: true }
     },
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: [-122.4194, 37.7749]
+      }
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    deletedAt: {
+      type: Date,
+      default: null
+    },
     status: {
       type: String,
       enum: ['Active', 'Disabled'],
@@ -96,4 +120,9 @@ const ParkingLocationSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('ParkingLocation', ParkingLocationSchema);
+parkingLocationSchema.index({ city: 1, status: 1 });
+parkingLocationSchema.index({ 'location': '2dsphere' });
+parkingLocationSchema.index({ tenantId: 1, isActive: 1 });
+parkingLocationSchema.index({ pricePerHour: 1 });
+
+module.exports = mongoose.model('ParkingLocation', parkingLocationSchema);
