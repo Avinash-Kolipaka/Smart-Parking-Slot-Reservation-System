@@ -33,14 +33,47 @@ const aiRoutes = require('./routes/aiRoutes');
 const app = express();
 const server = http.createServer(app);
 
+// ---------------------------------------------------------------------------
+// CORS — must be registered BEFORE routes so OPTIONS preflight is handled.
+// Allowed origins: both localhost dev ports + production Vercel URL.
+// CLIENT_URL / FRONTEND_URL both supported so existing .env files keep working.
+// ---------------------------------------------------------------------------
+const allowedOrigins = [
+  'http://localhost:3000',  // Vite dev server (vite.config.js port)
+  'http://localhost:5173',  // Vite default port
+  'http://localhost:5000',  // Backend itself (for local curl / health checks)
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL
+].filter(Boolean).map(o => o.replace(/\/$/, '')); // strip trailing slash
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow server-to-server / curl requests (no origin header)
+    if (!origin) {
+      return callback(null, true);
+    }
+    // Normalize incoming origin (strip trailing slash)
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    logger.warn(`CORS blocked request from origin: ${origin}`);
+    return callback(new Error(`CORS policy: origin ${origin} is not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID']
+};
+
+app.use(cors(corsOptions));
+
+// Explicitly respond to all OPTIONS preflight requests so CORS headers
+// are returned before any auth middleware can block the request.
+app.options('*', cors(corsOptions));
+
 // Security Middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? (process.env.CLIENT_URL || false) // Fail closed in prod if not set
-    : (process.env.CLIENT_URL || '*'),
-  credentials: true
-}));
 
 // Rate Limiter
 const generalLimiter = rateLimit({

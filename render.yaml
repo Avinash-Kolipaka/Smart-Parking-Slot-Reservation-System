@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: smart-parking-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Set the following in the Render dashboard (keep secrets out of git):
+      # MONGO_URI          — MongoDB Atlas connection string
+      # JWT_SECRET         — strong random secret (min 32 chars)
+      # JWT_REFRESH_SECRET — different strong random secret
+      # CLIENT_URL         — https://smart-parking-slot-reservation-system-kpaqns75g.vercel.app
+      # FRONTEND_URL       — https://smart-parking-slot-reservation-system-kpaqns75g.vercel.app
+      # REDIS_URL          — optional, memory fallback used if absent
+      # SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM — optional
+      # CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET — optional
