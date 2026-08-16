@@ -54,7 +54,7 @@ const corsOptions = {
     }
     // Normalize incoming origin (strip trailing slash)
     const normalizedOrigin = origin.replace(/\/$/, '');
-    if (allowedOrigins.includes(normalizedOrigin)) {
+    if (allowedOrigins.includes(normalizedOrigin) || normalizedOrigin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
     logger.warn(`CORS blocked request from origin: ${origin}`);
