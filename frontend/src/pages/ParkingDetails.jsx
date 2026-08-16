@@ -28,7 +28,7 @@ const ParkingDetails = () => {
       setLocation(response.data.data);
       
       // Load reviews
-      const reviewsRes = await api.get('/api/auth/me'); // Just mock/me setup
+      const reviewsRes = await api.get('/auth/me'); // Just mock/me setup
     } catch (err) {
       console.error(err.message);
     } finally {
