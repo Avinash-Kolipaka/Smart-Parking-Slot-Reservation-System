@@ -11,12 +11,40 @@ services:
         value: production
       - key: PORT
         value: 10000
-      # Set the following in the Render dashboard (keep secrets out of git):
-      # MONGO_URI          — MongoDB Atlas connection string
-      # JWT_SECRET         — strong random secret (min 32 chars)
-      # JWT_REFRESH_SECRET — different strong random secret
-      # CLIENT_URL         — https://smart-parking-slot-reservation-system-kpaqns75g.vercel.app
-      # FRONTEND_URL       — https://smart-parking-slot-reservation-system-kpaqns75g.vercel.app
-      # REDIS_URL          — optional, memory fallback used if absent
-      # SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM — optional
-      # CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET — optional
+
+      # -----------------------------------------------------------------------
+      # REQUIRED — set these in the Render Dashboard → Environment tab.
+      # DO NOT use localhost:27017 here; Render containers have no local MongoDB.
+      # MONGO_URI must be a MongoDB Atlas connection string, e.g.:
+      #   mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority
+      # -----------------------------------------------------------------------
+      - key: MONGO_URI
+        sync: false   # marks this as a secret; must be set manually in the dashboard
+
+      - key: JWT_SECRET
+        sync: false
+
+      - key: JWT_REFRESH_SECRET
+        sync: false
+
+      - key: CLIENT_URL
+        value: https://smart-parking-slot-reservation-system-kpaqns75g.vercel.app
+
+      - key: FRONTEND_URL
+        value: https://smart-parking-slot-reservation-system-kpaqns75g.vercel.app
+
+      # Optional — Redis (memory fallback used if absent)
+      # - key: REDIS_URL
+      #   sync: false
+
+      # Optional — SMTP mailer
+      # - key: SMTP_HOST
+      # - key: SMTP_PORT
+      # - key: SMTP_USER
+      # - key: SMTP_PASS
+      # - key: SMTP_FROM
+
+      # Optional — Cloudinary image uploads
+      # - key: CLOUDINARY_CLOUD_NAME
+      # - key: CLOUDINARY_API_KEY
+      # - key: CLOUDINARY_API_SECRET
