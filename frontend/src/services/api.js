@@ -24,6 +24,7 @@ const API_BASE_URL = _resolvedUrl.replace(/\/$/, ''); // strip trailing slash
 // Create Axios client pointing to the configured API endpoint
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000, // 30-second timeout to handle cold starts while preventing indefinite hangs
   headers: {
     'Content-Type': 'application/json'
   }
@@ -117,6 +118,15 @@ api.interceptors.response.use(
       }
     }
     
+    // Attach user-friendly explanation for network issues and timeouts
+    if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+      error.userMessage = 'Server took too long to respond. The backend server might be starting up from sleep or unreachable. Please try again.';
+    } else if (error.code === 'ERR_NETWORK' || !error.response) {
+      error.userMessage = 'Unable to connect to the backend server. Please verify the service is running or check your connection.';
+    } else if (error.response?.data?.message) {
+      error.userMessage = error.response.data.message;
+    }
+
     return Promise.reject(error);
   }
 );

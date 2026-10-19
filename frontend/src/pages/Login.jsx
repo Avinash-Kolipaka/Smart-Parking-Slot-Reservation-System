@@ -23,30 +23,35 @@ const Login = () => {
   } = useForm();
 
   const onSubmit = async (data) => {
-    setLoading(true);
-    const result = await login(data.email, data.password);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const result = await login(data.email, data.password);
 
-    if (result.success) {
-      showToast('Welcome back to SpotFlow!', 'success');
-      
-      // Determine redirection (check if admin or user)
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        try {
-          // Quick decode to check role and route accordingly
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          if (payload.role === 'admin') {
-            navigate('/admin');
-            return;
+      if (result.success) {
+        showToast('Welcome back to SpotFlow!', 'success');
+        
+        // Determine redirection (check if admin or user)
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+          try {
+            // Quick decode to check role and route accordingly
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            if (payload.role === 'admin') {
+              navigate('/admin');
+              return;
+            }
+          } catch (err) {
+            console.error(err);
           }
-        } catch (err) {
-          console.error(err);
         }
+        navigate('/dashboard');
+      } else {
+        showToast(result.message, 'error');
       }
-      navigate('/dashboard');
-    } else {
-      showToast(result.message, 'error');
+    } catch (err) {
+      showToast(err.userMessage || err.message || 'An unexpected error occurred. Please try again.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -19,15 +19,20 @@ const Register = () => {
   } = useForm();
 
   const onSubmit = async (data) => {
-    setLoading(true);
-    const result = await signup(data.name, data.email, data.password, data.phone);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const result = await signup(data.name, data.email, data.password, data.phone);
 
-    if (result.success) {
-      showToast('Account created successfully! Welcome to SpotFlow.', 'success');
-      navigate('/dashboard');
-    } else {
-      showToast(result.message, 'error');
+      if (result.success) {
+        showToast('Account created successfully! Welcome to SpotFlow.', 'success');
+        navigate('/dashboard');
+      } else {
+        showToast(result.message, 'error');
+      }
+    } catch (err) {
+      showToast(err.userMessage || err.message || 'An unexpected error occurred. Please try again.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
