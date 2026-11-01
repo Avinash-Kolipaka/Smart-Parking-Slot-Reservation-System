@@ -19,7 +19,7 @@ const _resolvedUrl = _envUrl && !_envUrl.includes('your-render-service')
   ? _envUrl
   : (
       isHosted
-        ? 'https://smart-parking-slot-reservation-system.onrender.com/api'
+        ? 'https://colour-ground-races-states.trycloudflare.com/api'
         : '/api'
     );
 
