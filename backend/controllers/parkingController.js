@@ -151,12 +151,15 @@ const getParkingLocation = async (req, res, next) => {
       return res.status(200).json(JSON.parse(cached));
     }
 
-    const location = await ParkingLocation.findOne({
+    const query = {
       _id: req.params.id,
-      tenantId: req.tenant._id,
       status: 'Active',
       isActive: { $ne: false }
-    });
+    };
+    if (req.tenant?._id) {
+      query.tenantId = req.tenant._id;
+    }
+    const location = await ParkingLocation.findOne(query);
 
     if (!location) {
       return res.status(404).json({ success: false, message: 'Parking location not found' });
@@ -191,11 +194,14 @@ const getParkingLocation = async (req, res, next) => {
 // @access  Private
 const getMyParkingLocations = async (req, res, next) => {
   try {
-    const locations = await ParkingLocation.find({
-      tenantId: req.tenant._id,
+    const query = {
       createdBy: req.user.id,
       isActive: { $ne: false }
-    });
+    };
+    if (req.tenant?._id) {
+      query.tenantId = req.tenant._id;
+    }
+    const locations = await ParkingLocation.find(query);
 
     const locationsWithSlotCounts = await Promise.all(
       locations.map(async (loc) => {
@@ -241,7 +247,7 @@ const createParkingLocation = async (req, res, next) => {
 
     const locationData = {
       ...req.body,
-      tenantId: req.tenant._id,
+      ...(req.tenant?._id ? { tenantId: req.tenant._id } : {}),
       location: locationPoint,
       createdBy: req.user.id
     };
@@ -293,7 +299,11 @@ const createParkingLocation = async (req, res, next) => {
 // @access  Private
 const updateParkingLocation = async (req, res, next) => {
   try {
-    let location = await ParkingLocation.findOne({ _id: req.params.id, tenantId: req.tenant._id });
+    const query = { _id: req.params.id };
+    if (req.tenant?._id) {
+      query.tenantId = req.tenant._id;
+    }
+    let location = await ParkingLocation.findOne(query);
     if (!location) {
       return res.status(404).json({ success: false, message: 'Parking location not found' });
     }
@@ -344,10 +354,11 @@ const updateParkingLocation = async (req, res, next) => {
 // @access  Private
 const deleteParkingLocation = async (req, res, next) => {
   try {
-    const location = await ParkingLocation.findOne({
-      _id: req.params.id,
-      tenantId: req.tenant._id
-    });
+    const query = { _id: req.params.id };
+    if (req.tenant?._id) {
+      query.tenantId = req.tenant._id;
+    }
+    const location = await ParkingLocation.findOne(query);
     if (!location) {
       return res.status(404).json({ success: false, message: 'Parking location not found' });
     }

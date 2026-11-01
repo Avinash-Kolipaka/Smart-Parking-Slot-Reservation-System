@@ -17,6 +17,8 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isAdmin = user && ['ADMIN', 'SUPER_ADMIN', 'admin'].includes((user.role || '').toUpperCase());
+
   // Load user notifications
   useEffect(() => {
     if (user) {
@@ -117,7 +119,7 @@ const Navbar = () => {
             <div className="flex items-center gap-3">
               
               {/* Admin Dashboard shortcut */}
-              {user.role === 'admin' && (
+              {isAdmin && (
                 <Link
                   to="/admin"
                   className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 hover:border-indigo-400/50 bg-indigo-950/20 px-3 py-1.5 rounded-full transition-all duration-200"
@@ -181,7 +183,7 @@ const Navbar = () => {
                       <User size={16} />
                       My Profile
                     </Link>
-                    {user.role === 'admin' && (
+                    {isAdmin && (
                       <Link
                         to="/admin"
                         onClick={() => setShowProfileMenu(false)}
@@ -265,7 +267,7 @@ const Navbar = () => {
               >
                 My Profile
               </Link>
-              {user.role === 'admin' && (
+              {isAdmin && (
                 <Link
                   to="/admin"
                   onClick={() => setIsOpen(false)}

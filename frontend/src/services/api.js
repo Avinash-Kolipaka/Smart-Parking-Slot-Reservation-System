@@ -11,10 +11,14 @@ const _envUrl =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL;
 
+const isHosted = typeof window !== 'undefined' && 
+  window.location.hostname !== 'localhost' && 
+  window.location.hostname !== '127.0.0.1';
+
 const _resolvedUrl = _envUrl && !_envUrl.includes('your-render-service')
   ? _envUrl
   : (
-      import.meta.env.PROD
+      isHosted
         ? 'https://smart-parking-slot-reservation-system.onrender.com/api'
         : '/api'
     );
@@ -123,6 +127,8 @@ api.interceptors.response.use(
       error.userMessage = 'Server took too long to respond. The backend server might be starting up from sleep or unreachable. Please try again.';
     } else if (error.code === 'ERR_NETWORK' || !error.response) {
       error.userMessage = 'Unable to connect to the backend server. Please verify the service is running or check your connection.';
+    } else if (error.response?.data?.errors?.length) {
+      error.userMessage = error.response.data.errors.map(e => e.message).join('. ');
     } else if (error.response?.data?.message) {
       error.userMessage = error.response.data.message;
     }

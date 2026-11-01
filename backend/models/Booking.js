@@ -5,7 +5,7 @@ const BookingSchema = new mongoose.Schema(
     tenantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Tenant',
-      required: true
+      required: false
     },
     bookingId: {
       type: String,

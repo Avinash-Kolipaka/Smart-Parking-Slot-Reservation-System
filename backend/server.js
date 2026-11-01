@@ -14,6 +14,7 @@ const logger = require('./utils/logger');
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 const requestIdMiddleware = require('./middleware/requestId');
 const { metricsMiddleware } = require('./middleware/metrics');
+const { resolveTenant } = require('./middleware/tenantMiddleware');
 
 // Route imports
 const authRoutes = require('./routes/authRoutes');
@@ -42,6 +43,9 @@ const allowedOrigins = [
   'http://localhost:3000',  // Vite dev server (vite.config.js port)
   'http://localhost:5173',  // Vite default port
   'http://localhost:5000',  // Backend itself (for local curl / health checks)
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5000',
   process.env.CLIENT_URL,
   process.env.FRONTEND_URL
 ].filter(Boolean).map(o => o.replace(/\/$/, '')); // strip trailing slash
@@ -54,11 +58,12 @@ const corsOptions = {
     }
     // Normalize incoming origin (strip trailing slash)
     const normalizedOrigin = origin.replace(/\/$/, '');
-    if (allowedOrigins.includes(normalizedOrigin) || normalizedOrigin.endsWith('.vercel.app')) {
+    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin);
+    if (isLocalhost || allowedOrigins.includes(normalizedOrigin) || normalizedOrigin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
     logger.warn(`CORS blocked request from origin: ${origin}`);
-    return callback(new Error(`CORS policy: origin ${origin} is not allowed`));
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -131,6 +136,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Mount Routes
+app.use('/api', resolveTenant);
 app.use('/api/auth', authRoutes);
 app.use('/api/parking', parkingRoutes);
 app.use('/api/slots', slotRoutes);
@@ -170,10 +176,12 @@ const startServer = async () => {
   });
 };
 
-startServer().catch((err) => {
-  logger.error(`Server startup failure: ${err.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  startServer().catch((err) => {
+    logger.error(`Server startup failure: ${err.message}`);
+    process.exit(1);
+  });
+}
 
 process.on('unhandledRejection', (err) => {
   logger.error(`Unhandled Rejection Error: ${err.message}`);

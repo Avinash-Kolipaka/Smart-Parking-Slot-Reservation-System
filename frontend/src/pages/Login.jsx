@@ -36,7 +36,8 @@ const Login = () => {
           try {
             // Quick decode to check role and route accordingly
             const payload = JSON.parse(atob(token.split('.')[1]));
-            if (payload.role === 'admin') {
+            const userRole = (payload.role || '').toUpperCase();
+            if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
               navigate('/admin');
               return;
             }

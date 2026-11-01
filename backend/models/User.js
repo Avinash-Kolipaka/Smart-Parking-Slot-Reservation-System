@@ -49,7 +49,7 @@ const UserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['USER', 'ADMIN', 'PARKING_MANAGER', 'SUPER_ADMIN'],
+      enum: ['USER', 'ADMIN', 'PARKING_MANAGER', 'SUPER_ADMIN', 'admin', 'user'],
       default: 'USER'
     },
     isBanned: {
@@ -78,10 +78,11 @@ const UserSchema = new mongoose.Schema(
 // Encrypt password using bcrypt pre-save
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
-    next();
+    return next();
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
 // Match user entered password to hashed password in database

@@ -5,7 +5,7 @@ const SlotSchema = new mongoose.Schema(
     tenantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Tenant',
-      required: true
+      required: false
     },
     parkingLocationId: {
       type: mongoose.Schema.Types.ObjectId,

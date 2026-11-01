@@ -13,7 +13,7 @@ describe('Critical Booking Concurrency Control Test', () => {
   let testSlot;
 
   beforeAll(async () => {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smart-parking-test';
+    const mongoUri = process.env.MONGO_URI_TEST || 'mongodb://127.0.0.1:27017/smart-parking-test';
     if (mongoose.connection.readyState === 0) {
       await mongoose.connect(mongoUri);
     }

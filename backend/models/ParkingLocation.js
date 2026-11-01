@@ -5,7 +5,7 @@ const parkingLocationSchema = new mongoose.Schema(
     tenantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Tenant',
-      required: true
+      required: false
     },
     name: {
       type: String,

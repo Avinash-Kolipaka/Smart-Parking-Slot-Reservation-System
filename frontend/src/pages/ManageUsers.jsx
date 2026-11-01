@@ -10,6 +10,10 @@ import {
 
 const roleColors = {
   admin: 'text-indigo-400 bg-indigo-950/20 border-indigo-500/20',
+  ADMIN: 'text-indigo-400 bg-indigo-950/20 border-indigo-500/20',
+  SUPER_ADMIN: 'text-purple-400 bg-purple-950/20 border-purple-500/20',
+  PARKING_MANAGER: 'text-amber-400 bg-amber-950/20 border-amber-500/20',
+  USER: 'text-blue-400 bg-blue-950/20 border-blue-500/20',
   customer: 'text-blue-400 bg-blue-950/20 border-blue-500/20'
 };
 
@@ -27,7 +31,8 @@ const ManageUsers = () => {
     setLoading(true);
     try {
       const res = await api.get('/users');
-      setUsers(res.data.data);
+      const list = Array.isArray(res.data?.data) ? res.data.data : (res.data?.data?.users || []);
+      setUsers(list);
     } catch (err) {
       showToast('Failed to load users', 'error');
     } finally {
@@ -100,10 +105,10 @@ const ManageUsers = () => {
           Total: <strong className="text-slate-200">{users.length}</strong>
         </span>
         <span className="bg-slate-900/40 border border-slate-800/60 px-3 py-1.5 rounded-lg">
-          Admins: <strong className="text-indigo-400">{users.filter(u => u.role === 'admin').length}</strong>
+          Admins: <strong className="text-indigo-400">{users.filter(u => ['ADMIN', 'SUPER_ADMIN', 'admin'].includes(u.role)).length}</strong>
         </span>
         <span className="bg-slate-900/40 border border-slate-800/60 px-3 py-1.5 rounded-lg">
-          Customers: <strong className="text-blue-400">{users.filter(u => u.role === 'customer').length}</strong>
+          Customers: <strong className="text-blue-400">{users.filter(u => ['USER', 'customer', 'CUSTOMER'].includes(u.role)).length}</strong>
         </span>
       </div>
 
@@ -155,8 +160,9 @@ const ManageUsers = () => {
                             onChange={e => setEditRole(e.target.value)}
                             className="glass-input text-xs py-1.5 px-2 w-28"
                           >
-                            <option value="customer">Customer</option>
-                            <option value="admin">Admin</option>
+                            <option value="USER">User / Customer</option>
+                            <option value="PARKING_MANAGER">Parking Manager</option>
+                            <option value="ADMIN">Admin</option>
                           </select>
                           <button
                             onClick={() => handleRoleChange(u._id)}
@@ -174,7 +180,7 @@ const ManageUsers = () => {
                         </div>
                       ) : (
                         <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${roleColors[u.role] || roleColors.customer}`}>
-                          {u.role === 'admin' ? <Shield size={9} /> : <User size={9} />}
+                          {['ADMIN', 'SUPER_ADMIN', 'admin'].includes(u.role) ? <Shield size={9} /> : <User size={9} />}
                           {u.role}
                         </span>
                       )}

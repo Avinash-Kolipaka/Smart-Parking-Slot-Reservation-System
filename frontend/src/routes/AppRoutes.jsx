@@ -61,7 +61,9 @@ const AdminRoute = ({ children }) => {
     );
   }
   
-  return user && user.role === 'admin' ? children : <Navigate to="/" replace />;
+  const role = (user?.role || '').toUpperCase();
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
+  return user && isAdmin ? children : <Navigate to="/" replace />;
 };
 
 const AppRoutes = () => {

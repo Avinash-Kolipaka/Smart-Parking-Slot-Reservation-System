@@ -132,6 +132,7 @@ const createBooking = async (req, res, next) => {
     const bookingId = generateReadableId();
 
     const booking = new Booking({
+      tenantId: location.tenantId || req.tenant?._id,
       bookingId,
       userId,
       locationId,

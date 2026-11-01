@@ -15,7 +15,10 @@ describe('Cross-Tenant Security Isolation Tests', () => {
   let parkingB, bookingB;
 
   beforeAll(async () => {
-    await mongoose.connect(process.env.MONGO_URI_TEST);
+    const mongoUri = process.env.MONGO_URI_TEST || 'mongodb://127.0.0.1:27017/smart-parking-test';
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(mongoUri);
+    }
 
     // Create Tenants
     tenantA = await Tenant.create({ name: 'Tenant A', slug: 'tenant-a' });
@@ -37,19 +40,30 @@ describe('Cross-Tenant Security Isolation Tests', () => {
     parkingB = await ParkingLocation.create({
       tenantId: tenantB._id,
       name: 'Tenant B Mall Parking',
+      address: '123 Test St',
       city: 'Test City',
-      location: { type: 'Point', coordinates: [0,0] },
+      coordinates: { lat: 37.7749, lng: -122.4194 },
+      openingHours: '00:00',
+      closingHours: '23:59',
+      parkingType: 'Covered',
+      location: { type: 'Point', coordinates: [0, 0] },
       pricePerHour: 10
     });
 
     bookingB = await Booking.create({
       tenantId: tenantB._id,
-      user: userB._id,
-      parkingLocation: parkingB._id,
+      userId: userB._id,
+      locationId: parkingB._id,
+      slotId: new mongoose.Types.ObjectId(),
+      vehicleNumber: 'KA-01-AB-1234',
+      vehicleType: 'Car',
       bookingId: 'B-12345',
+      bookingDate: new Date(),
       startTime: new Date(),
       endTime: new Date(Date.now() + 3600000),
-      totalAmount: 10,
+      duration: 1,
+      amount: 10,
+      verificationToken: 'vtoken123',
       bookingStatus: 'Confirmed'
     });
   });
@@ -88,7 +102,7 @@ describe('Cross-Tenant Security Isolation Tests', () => {
     
     // The controller should query `{ _id: req.params.id, tenantId: req.tenant._id }`
     // Which will result in not found (404) or unauthorized (403)
-    expect(res.statusCode).toBe(404);
+    expect([403, 404]).toContain(res.statusCode);
   });
 
   test('API key with read scope CANNOT delete resources', async () => {

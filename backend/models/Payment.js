@@ -5,7 +5,7 @@ const PaymentSchema = new mongoose.Schema(
     tenantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Tenant',
-      required: true
+      required: false
     },
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -18,7 +18,7 @@ const PaymentSchema = new mongoose.Schema(
     },
     method: {
       type: String,
-      enum: ['Card', 'UPI', 'NetBanking', 'MockGateway'],
+      enum: ['Card', 'UPI', 'NetBanking', 'MockGateway', 'SimulatedGateway'],
       default: 'MockGateway'
     },
     status: {

@@ -13,6 +13,7 @@ const Payment = require('../models/Payment');
 const Notification = require('../models/Notification');
 const Review = require('../models/Review');
 const AdminLog = require('../models/AdminLog');
+const Tenant = require('../models/Tenant');
 
 const seedDatabase = async () => {
   try {
@@ -33,6 +34,18 @@ const seedDatabase = async () => {
     ]);
     console.log('Database cleared!');
 
+    console.log('Ensuring default Tenant exists...');
+    const defaultTenant = await Tenant.findOneAndUpdate(
+      { slug: 'parkops-default' },
+      {
+        name: 'ParkOps Main Facility',
+        slug: 'parkops-default',
+        status: 'ACTIVE',
+        plan: 'ENTERPRISE'
+      },
+      { upsert: true, new: true }
+    );
+
     console.log('Creating system users & roles...');
     const admin = await User.create({
       name: 'System Admin',
@@ -43,9 +56,27 @@ const seedDatabase = async () => {
       profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
     });
 
+    await User.create({
+      name: 'System Admin',
+      email: 'admin@parkops.com',
+      password: 'password123',
+      phone: '+1 555-0199',
+      role: 'ADMIN',
+      profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
+    });
+
     const manager = await User.create({
       name: 'Parking Manager',
       email: 'manager@parkops.local',
+      password: 'password123',
+      phone: '+1 555-0288',
+      role: 'PARKING_MANAGER',
+      profileImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200'
+    });
+
+    await User.create({
+      name: 'Parking Operator',
+      email: 'operator@parkops.com',
       password: 'password123',
       phone: '+1 555-0288',
       role: 'PARKING_MANAGER',
@@ -65,6 +96,18 @@ const seedDatabase = async () => {
       ]
     });
 
+    await User.create({
+      name: 'Demo Customer',
+      email: 'customer@parkops.com',
+      password: 'password123',
+      phone: '+1 555-0144',
+      role: 'USER',
+      profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+      vehicles: [
+        { licenseNumber: 'KA-01-AB-1234', vehicleType: 'Car', model: 'Tesla Model 3' }
+      ]
+    });
+
     const user2 = await User.create({
       name: 'John Doe',
       email: 'john@gmail.com',
@@ -80,6 +123,7 @@ const seedDatabase = async () => {
     console.log('Creating 5 Parking Locations...');
     const locations = await ParkingLocation.create([
       {
+        tenantId: defaultTenant._id,
         name: 'Downtown Grand Plaza',
         address: '750 Market St, San Francisco, CA 94102',
         city: 'San Francisco',
@@ -99,6 +143,7 @@ const seedDatabase = async () => {
         createdBy: admin._id
       },
       {
+        tenantId: defaultTenant._id,
         name: 'Silicon Hub Tech Park Parking',
         address: '250 Innovation Way, San Jose, CA 95110',
         city: 'San Jose',
@@ -118,6 +163,7 @@ const seedDatabase = async () => {
         createdBy: manager._id
       },
       {
+        tenantId: defaultTenant._id,
         name: 'Metro Terminal North Parking',
         address: '150 Fourth St, San Francisco, CA 94103',
         city: 'San Francisco',
@@ -137,6 +183,7 @@ const seedDatabase = async () => {
         createdBy: admin._id
       },
       {
+        tenantId: defaultTenant._id,
         name: 'Bayview Harbor Underground',
         address: '500 Embarcadero, Oakland, CA 94607',
         city: 'Oakland',
@@ -156,6 +203,7 @@ const seedDatabase = async () => {
         createdBy: manager._id
       },
       {
+        tenantId: defaultTenant._id,
         name: 'Civic Center Premium Garage',
         address: '355 McAllister St, San Francisco, CA 94102',
         city: 'San Francisco',
@@ -197,6 +245,7 @@ const seedDatabase = async () => {
           }
 
           slotsToCreate.push({
+            tenantId: defaultTenant._id,
             parkingLocationId: loc._id,
             slotNumber,
             floor,
@@ -222,6 +271,7 @@ const seedDatabase = async () => {
     const sampleSlot = await Slot.findOne({ parkingLocationId: firstLoc._id, vehicleType: 'Car' });
 
     const pastBooking = await Booking.create({
+      tenantId: defaultTenant._id,
       bookingId: 'PRK-20260810-A99B11',
       userId: user1._id,
       locationId: firstLoc._id,
@@ -242,6 +292,7 @@ const seedDatabase = async () => {
     });
 
     await Payment.create({
+      tenantId: defaultTenant._id,
       bookingId: pastBooking._id,
       amount: 118.00,
       method: 'SimulatedGateway',
@@ -251,6 +302,7 @@ const seedDatabase = async () => {
     });
 
     await Notification.create({
+      tenantId: defaultTenant._id,
       userId: user1._id,
       title: 'Welcome to ParkOps',
       message: 'Your account is active. Explore locations and book parking slots instantly.',
@@ -259,10 +311,11 @@ const seedDatabase = async () => {
 
     console.log('✅ Database Seeding Completed Successfully!');
     console.log('--------------------------------------------------');
-    console.log('Demo Credentials:');
-    console.log('ADMIN:   admin@parkops.local   / password123');
-    console.log('MANAGER: manager@parkops.local / password123');
-    console.log('USER:    user@parkops.local    / password123');
+    console.log('Demo Credentials (all use password: password123):');
+    console.log('ADMIN:    admin@parkops.com   (or admin@parkops.local)');
+    console.log('OPERATOR: operator@parkops.com (or manager@parkops.local)');
+    console.log('CUSTOMER: customer@parkops.com (or user@parkops.local)');
+    console.log('USER:     john@gmail.com');
     console.log('--------------------------------------------------');
 
     process.exit(0);
